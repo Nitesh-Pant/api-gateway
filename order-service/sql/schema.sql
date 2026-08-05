@@ -1,0 +1,17 @@
+CREATE TABLE orders (
+    id INT AUTO_INCREMENT PRIMARY KEY ,
+    user_id CHAR(36) NOT NULL,
+    product_id VARCHAR(50) NOT NULL,
+    quantity INT NOT NULL,
+    total_price DECIMAL(10,2) NOT NULL,
+
+    status ENUM(
+        'PENDING',
+        'CONFIRMED',
+        'CANCELLED'
+    ) DEFAULT 'PENDING',
+
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        ON UPDATE CURRENT_TIMESTAMP
+);
