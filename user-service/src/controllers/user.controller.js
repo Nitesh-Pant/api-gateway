@@ -1,4 +1,4 @@
-import {createUser, findUserByEmail, findUserById} from '../models/user.model.js'
+import {createUser, findUserByEmail, findUserById, findAllUsers} from '../models/user.model.js'
 import bycrypt from 'bcrypt';
 import jwt from 'jsonwebtoken';
 
@@ -59,6 +59,16 @@ export const getUserProfile = async (req, res) => {
             return res.status(404).json({message: 'User not found'});
         }
         return res.status(200).json({user});
+    }catch(err){
+        console.error(err);
+        next();
+    }
+}
+
+export const getAllUsers = async (req, res) => {
+    try{
+        const users = await findAllUsers();
+        return res.status(200).json({users});
     }catch(err){
         console.error(err);
         next();

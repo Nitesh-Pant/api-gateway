@@ -32,3 +32,13 @@ export const findUserByEmail = async (email) => {
         throw new Error('Error fetching user');
     }
 }
+
+export const findAllUsers = async () => {
+    try{
+        const [rows] = await pool.query("Select * from users")
+        return rows;
+    }catch(err){
+        console.error(err);
+        throw new Error('Error fetching users');
+    }
+}
