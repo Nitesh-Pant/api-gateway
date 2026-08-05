@@ -1,0 +1,16 @@
+-- sql/schema.sql
+
+CREATE TABLE users (
+    id CHAR(36) PRIMARY KEY DEFAULT (UUID()),
+    name VARCHAR(100) NOT NULL,
+    email VARCHAR(255) NOT NULL,
+    password_hash VARCHAR(555) NOT NULL,
+    phone VARCHAR(20),
+    role ENUM('user', 'admin') NOT NULL DEFAULT 'user',
+    is_verified BOOLEAN NOT NULL DEFAULT FALSE,
+    created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    deleted_at TIMESTAMP NULL DEFAULT NULL,
+
+    UNIQUE KEY uniq_email (email)
+);
