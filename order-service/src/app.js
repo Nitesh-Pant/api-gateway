@@ -9,7 +9,7 @@ const app = express();
 app.use(express.json());
 
 
-app.use('/orders', orderRoutes);
+app.use('/', orderRoutes);
 
 // basic error handler (last middleware)
 app.use((err, req, res, next) => {
