@@ -33,3 +33,14 @@ export const findOrdersByUserId = async (user_id) => {
         throw new Error("Error fetching orders for user");
     }
 };
+
+// ideally this should be in a separate admin model, but for simplicity, I'm keeping it here
+export const findAllOrders= async (skip=0) => {
+    try {
+        const [rows] = await pool.query("SELECT * FROM orders order by created_at desc limit 50 offset ?", [skip]);
+        return rows;
+    } catch (err) {
+        console.error(err);
+        throw new Error("Error fetching orders for user");
+    }
+};

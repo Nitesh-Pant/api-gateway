@@ -1,7 +1,7 @@
 import pool from '../config/db.js';
 import { v4 as uuidv4 } from 'uuid';
 
-export const createUser = async ({name, email, password_hash, phone, role="admin"}) => {
+export const createUser = async ({name, email, password_hash, phone, role="user"}) => {
     try{
         const userId = uuidv4();
         const [result] = await pool.query("INSERT INTO users (id, name, email, password_hash, phone, role) VALUES (?, ?, ?, ?, ?, ?)", [userId, name, email, password_hash, phone, role])
@@ -33,9 +33,10 @@ export const findUserByEmail = async (email) => {
     }
 }
 
-export const findAllUsers = async () => {
+// ideally this should be in a separate admin model, but for simplicity, I'm keeping it here
+export const findAllUsers = async (skip = 0) => {
     try{
-        const [rows] = await pool.query("Select * from users")
+        const [rows] = await pool.query("Select * from users order by created_at desc limit 50 offset ?", [skip])
         return rows;
     }catch(err){
         console.error(err);

@@ -7,8 +7,8 @@ const router = Router();
 
 router.post('/register', registerUser);
 router.post('/login', login);
-router.get('/:id', authMiddleware, getUserProfile);
-router.get('/admin/users', authMiddleware, getAllUsers);
+router.get('/:id', /* authMiddleware, */ getUserProfile); // auth removed as it is handled in api-gateway-dwarpal
+router.get('/a/users', /* authMiddleware, */ getAllUsers);
 
 
 export default router;

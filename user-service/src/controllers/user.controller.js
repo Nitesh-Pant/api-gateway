@@ -52,7 +52,13 @@ export const login = async (req, res)=>{
 }
 
 export const getUserProfile = async (req, res) => {
-    const userId = req.user.id;
+    const userId = req?.user?.id || JSON.parse(req.headers['x-user'] || '{}')?.id
+    // const userId = req?.user?.id;
+    if(!userId) {
+        console.log('User ID not found in request', userId);
+        return res.status(401).json({message: 'Unauthorized'});
+    }
+
     try{
         const user = await findUserById(userId);
         if(!user){
@@ -65,9 +71,11 @@ export const getUserProfile = async (req, res) => {
     }
 }
 
+// ideally this should be in a separate admin controller, but for simplicity, I'm keeping it here
 export const getAllUsers = async (req, res) => {
+    const skip = parseInt(req.query.skip) || 0;
     try{
-        const users = await findAllUsers();
+        const users = await findAllUsers(skip);
         return res.status(200).json({users});
     }catch(err){
         console.error(err);
