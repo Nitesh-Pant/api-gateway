@@ -1,0 +1,7 @@
+services:
+  redis:
+    image: redis:7
+    container_name: dwarpal-redis
+    restart: unless-stopped
+    ports:
+      - "6381:6379"

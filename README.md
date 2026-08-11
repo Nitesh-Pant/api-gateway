@@ -48,7 +48,7 @@ This project is being built feature-by-feature, exactly as it would evolve in a 
 
 ---
 
-# ✅ API Gateway (Dwarpal)
+<!-- # ✅ API Gateway (Dwarpal)
 
 - Reverse proxy / routing to `user-service` and `order-service`, each proxy pulled into its own middleware (`userProxy.middleware.js`, `orderProxy.middleware.js`)
 - Centralized JWT verification (removed from individual services), factored into `auth.middleware.js`
@@ -57,11 +57,120 @@ This project is being built feature-by-feature, exactly as it would evolve in a 
 - Decoded user info forwarded downstream to services via the `x-user` header
 - Config via `.env` (`PORT`, `JWT_SECRET`)
 
+--- -->
+
+# ✅ API Gateway — Dwarpal
+
+### Routing / Reverse Proxy
+
+- Routes incoming requests to `user-service` and `order-service`
+- Separate proxy middleware for each service
+- Gateway acts as the single entry point for clients
+
+### Authentication
+
+- Centralized JWT verification
+- JWT verification happens at the gateway instead of every service
+- Protected routes require a valid token
+- Public routes such as registration and login bypass authentication
+
+### RBAC
+
+- Policy-based route protection
+- Route policies are defined in:
+
+```text
+src/config/policies.js
+```
+
+- Each protected route explicitly defines allowed roles
+- Current roles:
+    - `user`
+    - `admin`
+- Admin-only APIs are rejected at the gateway when accessed by normal users
+
+### User Context Forwarding
+
+After successful JWT verification, the decoded user information is forwarded to downstream services through the request headers.
+
+```text
+Client
+   ↓
+JWT
+   ↓
+API Gateway
+   ↓
+JWT Verification
+   ↓
+RBAC
+   ↓
+x-user
+   ↓
+User / Order Service
+```
+
+This allows downstream services to know who made the request without having to independently verify the JWT again.
+
+### Rate Limiting
+
+- Token Bucket rate limiter implemented at the API Gateway
+- Redis is used to store rate-limit state
+- Each user has an independent rate-limit bucket
+- Rate-limit configuration is maintained separately from the middleware
+- Returns `429 Too Many Requests` when the bucket has no available tokens
+
+Example configuration:
+
+```text
+Capacity    = 5 tokens
+Refill Rate = 5 tokens / minute
+```
+
+Redis keys follow the pattern:
+
+```text
+rate-limit:user:<userId>
+```
+
+### Rate Limiter Reference Implementation
+
+A simple in-memory rate limiter is also implemented without Redis to understand the Token Bucket algorithm before moving the state to Redis.
+
+The in-memory implementation is only for learning/reference purposes and is not suitable for a multi-instance production gateway because each Node.js process would maintain its own independent state.
+
+### Redis
+
+Redis is integrated with the API Gateway and runs through Docker Compose.
+
+Redis is currently used for:
+
+- Rate-limit state
+- Shared state between gateway instances
+
+The Redis configuration is maintained separately inside the gateway configuration.
+
+### Gateway Request Flow
+
+```text
+Client
+  ↓
+API Gateway
+  ↓
+Authentication
+  ↓
+RBAC
+  ↓
+Rate Limiting
+  ↓
+Reverse Proxy / Routing
+  ↓
+User Service / Order Service
+```
+
 ---
 
 # 🚧 Coming Soon
 
-- Rate Limiting
 - Redis Caching
 - Centralized Logging
 
@@ -81,40 +190,46 @@ This project is being built feature-by-feature, exactly as it would evolve in a 
 
 # 🏗️ Project Structure
 
-```text
+``text
 api-gateway/
 │
-├── api-gateway-dwarpal/      # API Gateway — routing, auth, RBAC
-│   ├── src/
-│   │   ├── app.js
-│   │   ├── config/
-│   │   │   └── policies.js   # per-route auth & role rules
-│   │   └── middleware/
-│   │       ├── auth.middleware.js         # JWT verification + RBAC check
-│   │       ├── userProxy.middleware.js    # proxy to user-service
-│   │       └── orderProxy.middleware.js   # proxy to order-service
-│   ├── .env                  # PORT, JWT_SECRET
-│   └── package.json
+├── api-gateway-dwarpal/ # API Gateway — routing, auth, RBAC, rate limiting
+│ ├── src/
+│ │ ├── app.js
+│ │ ├── config/
+│ │ │ ├── policies.js # per-route auth & role rules
+│ │ │ └── redis.js # Redis client/connection config
+│ │ ├── constants/
+│ │ │ └── rateLimit.constants.js # bucket capacity, refill rate, etc.
+│ │ └── middleware/
+│ │ ├── auth.middleware.js # JWT verification + RBAC check
+│ │ ├── userProxy.middleware.js # proxy to user-service
+│ │ ├── orderProxy.middleware.js # proxy to order-service
+│ │ ├── tokenBucket.middleware.js # Redis-backed token bucket rate limiter
+│ │ └── staticRateLimiter.middleware.js # in-memory token bucket (reference only, no Redis)
+│ ├── docker-compose.yml # Redis for the gateway
+│ ├── .env # PORT, JWT_SECRET
+│ └── package.json
 │
 ├── user-service/
-│   ├── src/
-│   ├── sql/
-│   ├── docker-compose.yml
-│   └── ...
+│ ├── src/
+│ ├── sql/
+│ ├── docker-compose.yml
+│ └── ...
 │
 ├── order-service/
-│   ├── src/
-│   ├── sql/
-│   ├── docker-compose.yml
-│   └── ...
+│ ├── src/
+│ ├── sql/
+│ ├── docker-compose.yml
+│ └── ...
 │
 ├── docs/
-│   └── postman/
-│       └── API Gateway.postman_collection.json
+│ └── postman/
+│ └── API Gateway.postman_collection.json
 │
 └── README.md
-```
 
+````
 ---
 
 # 🧠 Why this project?
@@ -137,12 +252,15 @@ This project focuses on the backend concepts used in production systems:
 
 > [Aug 10th] Auth is now centralized in the API Gateway. Start the two backing services first (so the gateway has something to proxy to), then start the gateway itself — **all requests go through the gateway from now on**, not directly to the individual services.
 
+> [Aug 12th] The gateway now depends on Redis for rate limiting. Start Redis (via the gateway's own `docker-compose.yml`) before starting the gateway, or the token bucket middleware won't have anywhere to store bucket state.
+
+
 ## 1. Clone Repository
 
 ```bash
 git clone https://github.com/<your-username>/api-gateway.git
 cd api-gateway
-```
+````
 
 ---
 
@@ -190,6 +308,8 @@ http://localhost:4002
 
 ```bash
 cd api-gateway-dwarpal
+
+docker compose up -d   # starts Redis
 
 npm install
 
@@ -265,19 +385,30 @@ Roles currently supported: `user` and `admin` (stored on the `users` table).
 
 ---
 
+# 🚦 Rate Limiting
+
+Rate limiting is enforced at the gateway using a **token bucket** algorithm, backed by Redis so bucket state survives restarts and works across multiple gateway instances:
+
+- `tokenBucket.middleware.js` is the actual rate limiter used in the request path — it reads/writes each user's bucket (tokens, last refill time) in Redis, connected via `src/config/redis.js`.
+- Bucket parameters (capacity, refill rate, etc.) are centralized in `src/constants/`, rather than hardcoded in the middleware, so limits can be tuned in one place.
+- `staticRateLimiter.middleware.js` is a separate, in-memory token bucket implementation kept purely as a **reference** — it's not wired into any route, and exists to reason about token bucket behavior without Redis as a dependency.
+- Redis for the gateway is started via its own `docker-compose.yml`.
+
+---
+
 # 📈 Project Status
 
-| Module                       | Status         |
-| ---------------------------- | -------------- |
-| User Service                 | ✅ Complete    |
-| Order Service                | ✅ Complete    |
-| RBAC                         | ✅ Complete    |
-| API Gateway (routing + auth) | ✅ Complete    |
-| API Gateway (other features) | 🚧 In Progress |
-| Redis Cache                  | ⏳ Planned     |
-| Rate Limiter                 | ⏳ Planned     |
-| Reverse Proxy                | ⏳ Planned     |
-| Logging                      | ⏳ Planned     |
+| Module                              | Status         |
+| ----------------------------------- | -------------- |
+| User Service                        | ✅ Complete    |
+| Order Service                       | ✅ Complete    |
+| RBAC                                | ✅ Complete    |
+| API Gateway (routing + auth)        | ✅ Complete    |
+| API Gateway (other features)        | 🚧 In Progress |
+| Rate Limiter (Token Bucket + Redis) | ✅ Complete    |
+| Redis Cache                         | ⏳ Planned     |
+| Reverse Proxy                       | ⏳ Planned     |
+| Logging                             | ⏳ Planned     |
 
 ---
 
