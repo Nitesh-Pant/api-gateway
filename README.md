@@ -113,7 +113,12 @@ This allows downstream services to know who made the request without having to i
 
 ### Rate Limiting
 
-- Token Bucket rate limiter implemented at the API Gateway
+- [Aug 12th] Service-specific rate limits
+- [Aug 12th] Token Bucket rate limiting for authenticated users
+- [Aug 12th] Sliding Window rate limiting for IP-based/public APIs
+- [Aug 12th] Rate-limit strategy selected through route policies
+
+- [Before Aug 12th] Token Bucket rate limiter implemented at the API Gateway
 - Redis is used to store rate-limit state
 - Each user has an independent rate-limit bucket
 - Rate-limit configuration is maintained separately from the middleware
@@ -122,14 +127,20 @@ This allows downstream services to know who made the request without having to i
 Example configuration:
 
 ```text
-Capacity    = 5 tokens
-Refill Rate = 5 tokens / minute
+for users
+  Capacity    = 5 tokens
+  Refill Rate = 5 tokens / minute
+for orders
+  Capacity    = 10 tokens
+  Refill Rate = 10 tokens / minute
 ```
 
 Redis keys follow the pattern:
 
 ```text
-rate-limit:user:<userId>
+rate-limit:users:<userId>
+rate-limit:orders:<userId>
+rate-limit-ip:user:<userId>
 ```
 
 ### Rate Limiter Reference Implementation
@@ -173,6 +184,7 @@ User Service / Order Service
 
 - Redis Caching
 - Centralized Logging
+- Health Check
 
 ---
 
@@ -190,7 +202,7 @@ User Service / Order Service
 
 # 🏗️ Project Structure
 
-``text
+```text
 api-gateway/
 │
 ├── api-gateway-dwarpal/ # API Gateway — routing, auth, RBAC, rate limiting
@@ -199,13 +211,18 @@ api-gateway/
 │ │ ├── config/
 │ │ │ ├── policies.js # per-route auth & role rules
 │ │ │ └── redis.js # Redis client/connection config
+│ │ │ └── rate-limiter.policies.js
+│ │ │
 │ │ ├── constants/
 │ │ │ └── rateLimit.constants.js # bucket capacity, refill rate, etc.
+│ │ │
 │ │ └── middleware/
 │ │ ├── auth.middleware.js # JWT verification + RBAC check
+| | ├── rateLimiter.middleware.js # main rate limiter
+│ │ ├── slidingWindowRateLimiter.middleware.js # sliding window rate limiter IP based (un authorized user)
 │ │ ├── userProxy.middleware.js # proxy to user-service
 │ │ ├── orderProxy.middleware.js # proxy to order-service
-│ │ ├── tokenBucket.middleware.js # Redis-backed token bucket rate limiter
+│ │ ├── tokenBucketRateLimiter.middleware.js # Redis-backed token bucket rate limiter
 │ │ └── staticRateLimiter.middleware.js # in-memory token bucket (reference only, no Redis)
 │ ├── docker-compose.yml # Redis for the gateway
 │ ├── .env # PORT, JWT_SECRET
@@ -229,7 +246,8 @@ api-gateway/
 │
 └── README.md
 
-````
+```
+
 ---
 
 # 🧠 Why this project?
@@ -254,13 +272,12 @@ This project focuses on the backend concepts used in production systems:
 
 > [Aug 12th] The gateway now depends on Redis for rate limiting. Start Redis (via the gateway's own `docker-compose.yml`) before starting the gateway, or the token bucket middleware won't have anywhere to store bucket state.
 
-
 ## 1. Clone Repository
 
 ```bash
 git clone https://github.com/<your-username>/api-gateway.git
 cd api-gateway
-````
+```
 
 ---
 
@@ -387,6 +404,7 @@ Roles currently supported: `user` and `admin` (stored on the `users` table).
 
 # 🚦 Rate Limiting
 
+[Before Aug 12]
 Rate limiting is enforced at the gateway using a **token bucket** algorithm, backed by Redis so bucket state survives restarts and works across multiple gateway instances:
 
 - `tokenBucket.middleware.js` is the actual rate limiter used in the request path — it reads/writes each user's bucket (tokens, last refill time) in Redis, connected via `src/config/redis.js`.
@@ -394,21 +412,57 @@ Rate limiting is enforced at the gateway using a **token bucket** algorithm, bac
 - `staticRateLimiter.middleware.js` is a separate, in-memory token bucket implementation kept purely as a **reference** — it's not wired into any route, and exists to reason about token bucket behavior without Redis as a dependency.
 - Redis for the gateway is started via its own `docker-compose.yml`.
 
+[From Aug 12]
+Rate limiting is handled at the API Gateway before requests are forwarded to downstream services.
+
+The gateway currently supports two strategies:
+
+### Token Bucket — User Based
+
+Used for authenticated APIs.
+
+- Each user gets an independent bucket.
+- Bucket state is stored in Redis.
+- Rate limits are configurable per service.
+- Requests consume tokens from the user's bucket.
+- Requests are rejected with `429 Too Many Requests` when the bucket has no available tokens.
+
+Redis key format:
+
+```text
+rate-limit:<service>:<userId>
+```
+
+### Sliding Window — IP Based
+
+Used for unauthenticated/public APIs where a user ID is not available.
+
+- Requests are tracked using the client's IP.
+- Request timestamps are stored in Redis.
+- Requests outside the configured time window are removed.
+- Requests exceeding the configured limit receive 429 Too Many Requests.
+
+Redis key format:
+
+```text
+rate-limit-ip:<service>:<ip>
+```
+
 ---
 
 # 📈 Project Status
 
-| Module                              | Status         |
-| ----------------------------------- | -------------- |
-| User Service                        | ✅ Complete    |
-| Order Service                       | ✅ Complete    |
-| RBAC                                | ✅ Complete    |
-| API Gateway (routing + auth)        | ✅ Complete    |
-| API Gateway (other features)        | 🚧 In Progress |
-| Rate Limiter (Token Bucket + Redis) | ✅ Complete    |
-| Redis Cache                         | ⏳ Planned     |
-| Reverse Proxy                       | ⏳ Planned     |
-| Logging                             | ⏳ Planned     |
+| Module                                           | Status         |
+| ------------------------------------------------ | -------------- |
+| User Service                                     | ✅ Complete    |
+| Order Service                                    | ✅ Complete    |
+| RBAC                                             | ✅ Complete    |
+| API Gateway (routing + auth)                     | ✅ Complete    |
+| API Gateway (other features)                     | 🚧 In Progress |
+| Rate Limiter (Token Bucket + Redis)              | ✅ Complete    |
+| Rate Limiter (Sliding Window (ip-based) + Redis) | ✅ Complete    |
+| Reverse Proxy                                    | ⏳ Planned     |
+| Logging                                          | ⏳ Planned     |
 
 ---
 
@@ -417,3 +471,7 @@ Rate limiting is enforced at the gateway using a **token bucket** algorithm, bac
 This project is intentionally being built from scratch without using frameworks like NestJS or Kong.
 
 The objective is to understand how production backend systems actually work internally by implementing features myself.
+
+```
+
+```
