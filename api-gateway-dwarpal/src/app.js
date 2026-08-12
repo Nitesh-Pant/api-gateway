@@ -4,8 +4,7 @@ import authMiddleware from "./middleware/auth.middleware.js";
 import policies from './config/policies.js';
 import ordersProxyMiddleware from "./middleware/orderProxy.middleware.js";
 import usersProxyMiddleware from './middleware/userProxy.middleware.js';
-import userRateLimitMiddleware from './middleware/staticRateLimiter.middleware.js';
-import tokenBucketRateLimiter from "./middleware/tokenBucketRateLimiter.middleware.js";
+import rateLimiterMiddleware from "./middleware/rateLimiter.middleware.js";
 
 dotenv.config();
 
@@ -14,9 +13,10 @@ const app = express();
 console.log('policies:', policies);
 
 app.use(authMiddleware)
+app.use(rateLimiterMiddleware)
 
 
-app.use('/users', /* userRateLimitMiddleware,  */ tokenBucketRateLimiter, usersProxyMiddleware)
+app.use('/users', usersProxyMiddleware)
 
 app.use("/orders", ordersProxyMiddleware)
 

@@ -5,11 +5,21 @@ import policies from '../config/policies.js';
 
 dotenv.config();
 
+const normalizePath = (path) => {
+  if (path.length > 1 && path.endsWith('/')) {
+    return path.slice(0, -1);
+  }
+  return path;
+};
+
 const requestPolicyValidator = (url)=>{
     console.log('url,', url)
+
+    const requestPath = normalizePath(url.split('?')[0]);
+
     return policies.find(policy=>{
         const policyPartsArr = policy.path.split('/')   // ["", user, id]
-        const urlPartsArr = url.split('/')              // ["", user, 921nacsa781bd]
+        const urlPartsArr = requestPath.split('/')              // ["", user, 921nacsa781bd]
 
         if(policyPartsArr.length != urlPartsArr.length){
             return false
@@ -23,7 +33,13 @@ const requestPolicyValidator = (url)=>{
 
 const authMiddleware = (req, res, next) => {
 
-    const policy = requestPolicyValidator(req.url)
+    const policy = requestPolicyValidator(req.path)
+
+    if (!policy) {
+        return res.status(404).json({
+            message: 'No policy configured for this route'
+        });
+    }
 
     const auth = policy['auth']
     const role = policy['role']
@@ -57,4 +73,5 @@ const authMiddleware = (req, res, next) => {
     }
 }
 
+export {requestPolicyValidator};
 export default authMiddleware;
